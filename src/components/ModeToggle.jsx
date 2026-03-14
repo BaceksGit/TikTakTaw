@@ -19,6 +19,15 @@ export default function ModeToggle({ mode, onChange }) {
             >
                 vs Bot
             </button>
+            <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "online"}
+                className={`mode-btn${mode === "online" ? " active" : ""}`}
+                onClick={() => onChange("online")}
+            >
+                Online
+            </button>
         </div>
     );
 }

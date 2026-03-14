@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { checkWin, isDraw } from "../logic/checkWin";
 import { getBotMove } from "../logic/minimax";
 
@@ -48,6 +48,39 @@ export function useGame(mode) {
 
   const patch = (updates) => setState((s) => ({ ...s, ...updates }));
 
+  function applyMove(boardSnapshot, mark) {
+    const win = checkWin(boardSnapshot);
+    const draw = !win && isDraw(boardSnapshot);
+
+    if (win) {
+      setScores((s) => ({ ...s, [mark]: s[mark] + 1 }));
+      setState((s) => ({
+        ...s,
+        board: boardSnapshot,
+        winCombo: win,
+        status: mode === "online" ? `${mark} wins!` : `Player ${mark} wins!`,
+        dotClass: "turn-dot dot-win",
+        gameOver: true,
+      }));
+      setTimeout(() => patch({ winStyle: getWinLineStyle(win) }), 10);
+      return true;
+    }
+
+    if (draw) {
+      setScores((s) => ({ ...s, D: s.D + 1 }));
+      setState((s) => ({
+        ...s,
+        board: boardSnapshot,
+        status: "It's a draw!",
+        dotClass: "turn-dot",
+        gameOver: true,
+      }));
+      return true;
+    }
+
+    return false;
+  }
+
   function handleClick(i) {
     if (gameOver || board[i] || botThinking) return;
     if (mode === "bot" && current === "O") return;
@@ -55,44 +88,76 @@ export function useGame(mode) {
     const newBoard = [...board];
     newBoard[i] = current;
 
-    const win = checkWin(newBoard);
-    const draw = !win && isDraw(newBoard);
-
-    if (win) {
-      setScores((s) => ({ ...s, [current]: s[current] + 1 }));
-      setState((s) => ({
-        ...s,
-        board: newBoard,
-        winCombo: win,
-        status: `Player ${current} wins!`,
-        dotClass: "turn-dot dot-win",
-        gameOver: true,
-      }));
-      setTimeout(() => patch({ winStyle: getWinLineStyle(win) }), 10);
-      return;
-    }
-
-    if (draw) {
-      setScores((s) => ({ ...s, D: s.D + 1 }));
-      setState((s) => ({
-        ...s,
-        board: newBoard,
-        status: "It's a draw!",
-        dotClass: "turn-dot",
-        gameOver: true,
-      }));
-      return;
-    }
+    const ended = applyMove(newBoard, current);
+    if (ended) return;
 
     const next = current === "X" ? "O" : "X";
     setState((s) => ({
       ...s,
       board: newBoard,
       current: next,
-      status: mode === "bot" && next === "O" ? "Bot is thinking…" : `Player ${next}'s turn`,
+      status: mode === "bot" && next === "O"
+        ? "Bot is thinking…"
+        : mode === "online"
+        ? `${next}'s turn`
+        : `Player ${next}'s turn`,
       dotClass: `turn-dot dot-${next.toLowerCase()}`,
     }));
   }
+
+  // For online mode: apply opponent's move
+  const applyOpponentMove = useCallback((i) => {
+    setState((prev) => {
+      if (prev.gameOver || prev.board[i]) return prev;
+      const newBoard = [...prev.board];
+      const mark = prev.current;
+      newBoard[i] = mark;
+
+      const win = checkWin(newBoard);
+      const draw = !win && isDraw(newBoard);
+
+      if (win) {
+        setTimeout(() => patch({ winStyle: getWinLineStyle(win) }), 10);
+        return {
+          ...prev,
+          board: newBoard,
+          winCombo: win,
+          status: `${mark} wins!`,
+          dotClass: "turn-dot dot-win",
+          gameOver: true,
+        };
+      }
+
+      if (draw) {
+        return {
+          ...prev,
+          board: newBoard,
+          status: "It's a draw!",
+          dotClass: "turn-dot",
+          gameOver: true,
+        };
+      }
+
+      const next = mark === "X" ? "O" : "X";
+      return {
+        ...prev,
+        board: newBoard,
+        current: next,
+        status: `${next}'s turn`,
+        dotClass: `turn-dot dot-${next.toLowerCase()}`,
+      };
+    });
+  }, []);
+
+  // For online mode: apply scores sent by opponent
+  const applyScores = useCallback((incoming) => {
+    setScores(incoming);
+  }, []);
+
+  // For online mode: apply opponent's reset
+  const applyReset = useCallback(() => {
+    setState({ ...INITIAL_STATE, board: Array(9).fill("") });
+  }, []);
 
   useEffect(() => {
     if (mode !== "bot" || current !== "O" || gameOver) return;
@@ -187,6 +252,8 @@ export function useGame(mode) {
     handleClick,
     resetGame,
     resetAll,
+    applyOpponentMove,
+    applyReset,
+    applyScores,
   };
 }
-

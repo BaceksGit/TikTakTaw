@@ -1,4 +1,4 @@
-# TikTakTaw (Tic-Tac-Toe with Minimax Bot)
+# TikTakTaw (Tic-Tac-Toe with Minimax Bot + Online Multiplayer)
 
 Free to use Tic‑Tac‑Toe game built with React + Vite. 
 
@@ -6,14 +6,17 @@ Free to use Tic‑Tac‑Toe game built with React + Vite.
 
 ## Screenshot
 
-![TikTakTaw gameplay](./src/assets/tiktaktaw_gameplay.png)
+<p align="center">
+  <img src="./src/assets/tiktaktaw_gameplay1.png" alt="TikTakTaw gameplay" />
+</p>
 
 **Author:** Baceks  
 **Created:** March 11, 2026 (GMT+8)
 
 ## Features
 
-- **Two modes:** `1v1` (local) and `vs Bot` (minimax AI).
+- **Three modes:** `1v1` (local), `vs Bot` (minimax AI), and `Online` (PeerJS / WebRTC).
+- **Online rooms:** Create a room and share a link or room code (no account needed).
 - **Themes:** System / Light / Dark toggle.
 - **Polish:** Win line animation, scoreboard, and “Bot is thinking…” state.
 
@@ -23,6 +26,12 @@ Free to use Tic‑Tac‑Toe game built with React + Vite.
 - Get 3 in a row to win.
 - Click **New game** to reset the board (scores stay).
 - Switching modes resets everything (board + scores).
+
+### Online (PeerJS)
+
+- Choose **Online** -> **Create room** to host (you play as **X** and go first).
+- Share the invite link (or **room code**) with your friend.
+- Your friend chooses **Online** -> **Join room** and enters the room code (or opens the shared link).
 
 ## Getting Started
 
@@ -56,6 +65,7 @@ npm run preview
 - `src/components/` – UI components (board, toggles, status, score row)
 - `src/hooks/` – game + theme hooks
 - `src/logic/` – win checking + bot AI
+- Online multiplayer: `src/hooks/usePeer.js`, `src/components/OnlineModal.jsx`, `src/components/WaitingRoom.jsx`
 
 ## Troubleshooting
 
