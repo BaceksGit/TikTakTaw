@@ -1,4 +1,4 @@
-# TikTakTaw
+# TikTakTaw (Tic-Tac-Toe with Minimax Bot)
 
 Free to use Tic‑Tac‑Toe game built with React + Vite. 
 
