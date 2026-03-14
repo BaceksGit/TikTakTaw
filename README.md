@@ -1,16 +1,62 @@
-# React + Vite
+# TikTakTaw
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Free to use Tic‑Tac‑Toe game built with React + Vite. 
 
-Currently, two official plugins are available:
+**Author:** Baceks  
+**Created:** March 11, 2026 (GMT+8)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## React Compiler
+- **Two modes:** `1v1` (local) and `vs Bot` (minimax AI).
+- **Themes:** System / Light / Dark toggle.
+- **Polish:** Win line animation, scoreboard, and “Bot is thinking…” state.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## How to Play
 
-## Expanding the ESLint configuration
+- Click a cell to place your mark.
+- Get 3 in a row to win.
+- Click **New game** to reset the board (scores stay).
+- Switching modes resets everything (board + scores).
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Getting Started
+
+### Prereqs
+
+- Node.js (recommended: Node 18+)
+
+### Install
+
+```bash
+cd TikTakTaw
+npm install
+```
+
+### Run (dev)
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+npm run preview
+```
+
+## Project Structure
+
+- `src/App.jsx` – app layout + wiring
+- `src/components/` – UI components (board, toggles, status, score row)
+- `src/hooks/` – game + theme hooks
+- `src/logic/` – win checking + bot AI
+
+## Troubleshooting
+
+### PowerShell: “running scripts is disabled” when running `npm`
+
+If Windows PowerShell blocks `npm.ps1`, either:
+
+- Run commands via `cmd.exe`, or use `npm.cmd` (example: `npm.cmd run dev`), or
+- Change your execution policy for the current user (only if you understand the impact):
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`

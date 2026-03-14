@@ -1,7 +1,49 @@
-/* optional global styles */
-body {
-    margin: 0;
-    padding: 0;
-    background: #fff;
-    font-family: Arial, sans-serif;
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600&display=swap');
+
+* { box-sizing: border-box; }
+
+/* system default — follows OS */
+:root {
+  --bg: #f9f9f8;
+  --text: #1a1a1a;
+  --text-muted: #888;
+  --border: #ddd;
+  --hover: #f0f0ee;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141414;
+    --text: #f0f0ee;
+    --text-muted: #666;
+    --border: #2e2e2e;
+    --hover: #1e1e1e;
   }
+}
+
+/* explicit light */
+[data-theme="light"] {
+  --bg: #f9f9f8;
+  --text: #1a1a1a;
+  --text-muted: #888;
+  --border: #ddd;
+  --hover: #f0f0ee;
+}
+
+/* explicit dark */
+[data-theme="dark"] {
+  --bg: #141414;
+  --text: #f0f0ee;
+  --text-muted: #666;
+  --border: #2e2e2e;
+  --hover: #1e1e1e;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  transition: background 0.2s, color 0.2s;
+}
