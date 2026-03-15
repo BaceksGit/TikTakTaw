@@ -43,6 +43,7 @@ function getWinLineStyle(combo) {
 export function useGame(mode) {
   const [state, setState] = useState(INITIAL_STATE);
   const [scores, setScores] = useState({ X: 0, O: 0, D: 0 });
+  const [nextStarter, setNextStarter] = useState("O"); // after game 1 (X starts), O goes next
 
   const { board, current, gameOver, winCombo, winStyle, status, dotClass, botThinking } = state;
 
@@ -156,7 +157,17 @@ export function useGame(mode) {
 
   // For online mode: apply opponent's reset
   const applyReset = useCallback(() => {
-    setState({ ...INITIAL_STATE, board: Array(9).fill("") });
+    setNextStarter((prev) => {
+      const starter = prev;
+      setState({
+        ...INITIAL_STATE,
+        board: Array(9).fill(""),
+        current: starter,
+        status: `${starter}'s turn`,
+        dotClass: `turn-dot dot-${starter.toLowerCase()}`,
+      });
+      return starter === "X" ? "O" : "X";
+    });
   }, []);
 
   useEffect(() => {
@@ -231,10 +242,19 @@ export function useGame(mode) {
   }, [current, gameOver, mode]);
 
   function resetGame() {
-    setState({ ...INITIAL_STATE, board: Array(9).fill("") });
+    const starter = nextStarter;
+    setNextStarter(starter === "X" ? "O" : "X");
+    setState({
+      ...INITIAL_STATE,
+      board: Array(9).fill(""),
+      current: starter,
+      status: mode === "online" ? `${starter}'s turn` : `Player ${starter}'s turn`,
+      dotClass: `turn-dot dot-${starter.toLowerCase()}`,
+    });
   }
 
   function resetAll() {
+    setNextStarter("O");
     setState({ ...INITIAL_STATE, board: Array(9).fill("") });
     setScores({ X: 0, O: 0, D: 0 });
   }

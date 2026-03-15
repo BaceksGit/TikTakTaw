@@ -23,7 +23,6 @@ export default function App() {
   const [isHost, setIsHost] = useState(false);
   const [myMark, setMyMark] = useState(null); // "X" | "O"
   const [playerNames, setPlayerNames] = useState({ X: "", O: "" });
-  const [scores, setScores] = useState({ X: 0, O: 0, D: 0 });
 
   const {
     board,
@@ -63,7 +62,7 @@ export default function App() {
     setOnlineState("disconnected");
   }, []);
 
-  const { peerId, connected, error, ready, connectToPeer, sendMove, sendReset, sendScores } = usePeer({
+  const { peerId, connected, error, ready, peerDead, reconnect, connectToPeer, sendMove, sendReset, sendScores } = usePeer({
     onMove: handleOpponentMove,
     onReset: handleOpponentReset,
     onScores: handleOpponentScores,
@@ -151,14 +150,7 @@ export default function App() {
     window.history.replaceState({}, "", window.location.pathname);
   }
 
-  const activeScores = mode === "online" ? scores : localScores;
-
-  // sync scores for online mode from game hook
-  useEffect(() => {
-    if (mode === "online") {
-      setScores(localScores);
-    }
-  }, [localScores, mode]);
+  const activeScores = localScores;
 
   function getSubtitle() {
     if (mode === "1v1") return "two players · same screen";
@@ -221,6 +213,8 @@ export default function App() {
         <WaitingRoom
           peerId={peerId}
           playerName={playerNames.X}
+          peerDead={peerDead}
+          onRefresh={() => { reconnect(); }}
           onCancel={handleCancelOnline}
         />
       )}
