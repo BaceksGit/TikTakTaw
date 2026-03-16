@@ -1,5 +1,7 @@
-export default function WaitingRoom({ peerId, playerName, peerDead, onRefresh, onCancel }) {
-    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${peerId}`;
+export default function WaitingRoom({ peerId, gridCount, playerName, peerDead, onRefresh, onCancel }) {
+    const gridsParam = Number(gridCount);
+    const grids = Number.isFinite(gridsParam) && gridsParam >= 1 && gridsParam <= 3 ? gridsParam : 1;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${peerId}&grids=${grids}`;
     
         async function copyLink() {
             try {

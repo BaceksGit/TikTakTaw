@@ -1,14 +1,79 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
-export function usePeer({ onMove, onReset, onScores, onOpponentJoined, onOpponentLeft }) {
+export function usePeer({ onMove, onReset, onScores, onSettings, onOpponentJoined, onOpponentLeft }) {
     const peerRef = useRef(null);
     const connRef = useRef(null);
     const scriptLoadedRef = useRef(false);
+    const handlersRef = useRef({
+        onMove,
+        onReset,
+        onScores,
+        onSettings,
+        onOpponentJoined,
+        onOpponentLeft,
+    });
     const [peerId, setPeerId] = useState(null);
     const [connected, setConnected] = useState(false);
     const [error, setError] = useState(null);
     const [ready, setReady] = useState(false);
     const [peerDead, setPeerDead] = useState(false);
+
+    useEffect(() => {
+        handlersRef.current = {
+        onMove,
+        onReset,
+        onScores,
+        onSettings,
+        onOpponentJoined,
+        onOpponentLeft,
+        };
+    }, [onMove, onReset, onScores, onSettings, onOpponentJoined, onOpponentLeft]);
+
+    function normalizeIncoming(data) {
+        if (typeof data === "string") {
+        try {
+            return JSON.parse(data);
+        } catch {
+            return data;
+        }
+        }
+        return data;
+    }
+
+    function setupConn(conn) {
+        conn.on("open", () => {
+        setConnected(true);
+        handlersRef.current.onOpponentJoined?.();
+        });
+
+        conn.on("data", (data) => {
+        const msg = normalizeIncoming(data);
+
+        if (typeof msg === "number") {
+            handlersRef.current.onMove?.(msg);
+            return;
+        }
+
+        if (msg?.type === "move") {
+            const payload = msg.payload ?? msg.index ?? msg.data;
+            const normalizedPayload = typeof payload === "string" && /^\d+$/.test(payload) ? Number(payload) : payload;
+            handlersRef.current.onMove?.(normalizedPayload);
+        }
+        if (msg?.type === "reset") handlersRef.current.onReset?.();
+        if (msg?.type === "scores") handlersRef.current.onScores?.(msg.scores);
+        if (msg?.type === "settings") handlersRef.current.onSettings?.(msg.settings);
+        });
+
+        conn.on("close", () => {
+        setConnected(false);
+        connRef.current = null;
+        handlersRef.current.onOpponentLeft?.();
+        });
+
+        conn.on("error", (err) => {
+        setError(err.message);
+        });
+    }
 
     function createPeer() {
         if (!window.Peer) return;
@@ -68,29 +133,6 @@ export function usePeer({ onMove, onReset, onScores, onOpponentJoined, onOpponen
         createPeer();
     }, []);
 
-    function setupConn(conn) {
-        conn.on("open", () => {
-        setConnected(true);
-        onOpponentJoined?.();
-        });
-
-        conn.on("data", (data) => {
-        if (data.type === "move") onMove?.(data.index);
-        if (data.type === "reset") onReset?.();
-        if (data.type === "scores") onScores?.(data.scores);
-        });
-
-        conn.on("close", () => {
-        setConnected(false);
-        connRef.current = null;
-        onOpponentLeft?.();
-        });
-
-        conn.on("error", (err) => {
-        setError(err.message);
-        });
-    }
-
     const connectToPeer = useCallback((remotePeerId) => {
         if (!peerRef.current) return;
         const conn = peerRef.current.connect(remotePeerId);
@@ -99,7 +141,8 @@ export function usePeer({ onMove, onReset, onScores, onOpponentJoined, onOpponen
     }, []);
 
     const sendMove = useCallback((index) => {
-        connRef.current?.send({ type: "move", index });
+        if (typeof index === "number") connRef.current?.send({ type: "move", index });
+        else connRef.current?.send({ type: "move", payload: index });
     }, []);
 
     const sendReset = useCallback(() => {
@@ -110,5 +153,9 @@ export function usePeer({ onMove, onReset, onScores, onOpponentJoined, onOpponen
         connRef.current?.send({ type: "scores", scores });
     }, []);
 
-    return { peerId, connected, error, ready, peerDead, reconnect, connectToPeer, sendMove, sendReset, sendScores };
+    const sendSettings = useCallback((settings) => {
+        connRef.current?.send({ type: "settings", settings });
+    }, []);
+
+    return { peerId, connected, error, ready, peerDead, reconnect, connectToPeer, sendMove, sendReset, sendScores, sendSettings };
 }

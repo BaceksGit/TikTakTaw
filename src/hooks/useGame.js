@@ -55,6 +55,9 @@ function getMatchOutcome(boards) {
   if (boardCount === 2) {
     if (winsX === 2) return { done: true, winner: "X", draw: false };
     if (winsO === 2) return { done: true, winner: "O", draw: false };
+    if (winsX === 1 && winsO === 0 && finished === 2) return { done: true, winner: "X", draw: false };
+    if (winsO === 1 && winsX === 0 && finished === 2) return { done: true, winner: "O", draw: false };
+    if (winsX === 1 && winsO === 1 && finished === 2) return { done: true, winner: null, draw: true };
     if (finished === 2) return { done: true, winner: null, draw: true };
     return { done: false, winner: null, draw: false };
   }
@@ -83,8 +86,15 @@ function resolveIndexes(boardIndex, cellIndex) {
   return { boardIndex, cellIndex };
 }
 
+function growBoards(boards, requiredCount) {
+  if (requiredCount <= boards.length) return boards;
+  const safeRequired = Math.max(1, Math.min(3, requiredCount));
+  if (safeRequired <= boards.length) return boards;
+  return [...boards, ...createBoards(safeRequired - boards.length)];
+}
+
 export function useGame(mode, boardCount = 1) {
-  const safeBoardCount = mode === "online" ? 1 : Math.max(1, Math.min(3, Number(boardCount) || 1));
+  const safeBoardCount = Math.max(1, Math.min(3, Number(boardCount) || 1));
 
   const [state, setState] = useState(() =>
     ({
@@ -100,10 +110,10 @@ export function useGame(mode, boardCount = 1) {
 
   useEffect(() => {
     setNextStarter("O");
-    setState((prev) => ({
-      ...prev,
+    setState({
       ...createInitialState({ boardCount: safeBoardCount, mode, starter: "X" }),
-    }));
+      scores: { X: 0, O: 0, D: 0 },
+    });
   }, [mode, safeBoardCount]);
 
   function labelTurn(next) {
@@ -119,11 +129,12 @@ export function useGame(mode, boardCount = 1) {
       if (prev.matchOver || prev.botThinking) return prev;
       if (mode === "bot" && prev.current === "O") return prev;
 
-      const target = prev.boards[bIndex];
+      const expandedBoards = growBoards(prev.boards, bIndex + 1);
+      const target = expandedBoards[bIndex];
       if (!target || target.gameOver || target.cells[cIndex]) return prev;
 
       const mark = prev.current;
-      const nextBoards = prev.boards.map((b, idx) => {
+      const nextBoards = expandedBoards.map((b, idx) => {
         if (idx !== bIndex) return b;
 
         const nextCells = [...b.cells];
@@ -194,14 +205,19 @@ export function useGame(mode, boardCount = 1) {
     setState((prev) => {
       if (mode !== "online" || prev.matchOver) return prev;
 
-      const bIndex = typeof payload === "number" ? 0 : Number(payload?.boardIndex ?? 0);
-      const cIndex = typeof payload === "number" ? payload : Number(payload?.cellIndex ?? -1);
+      const normalizedPayload = typeof payload === "string" && /^\d+$/.test(payload) ? Number(payload) : payload;
 
-      const target = prev.boards[bIndex];
+      const bIndex = typeof normalizedPayload === "number" ? 0 : Number(normalizedPayload?.boardIndex ?? 0);
+      const cIndex = typeof normalizedPayload === "number" ? normalizedPayload : Number(normalizedPayload?.cellIndex ?? -1);
+      const hintedBoardCount = typeof normalizedPayload === "number" ? null : Number(normalizedPayload?.boardCount);
+      const requiredCount = Number.isFinite(hintedBoardCount) ? hintedBoardCount : bIndex + 1;
+
+      const expandedBoards = growBoards(prev.boards, requiredCount);
+      const target = expandedBoards[bIndex];
       if (!target || target.gameOver || target.cells[cIndex]) return prev;
 
       const mark = prev.current;
-      const nextBoards = prev.boards.map((b, idx) => {
+      const nextBoards = expandedBoards.map((b, idx) => {
         if (idx !== bIndex) return b;
 
         const nextCells = [...b.cells];
@@ -222,6 +238,9 @@ export function useGame(mode, boardCount = 1) {
           matchOver: true,
           status: outcome.winner ? `${outcome.winner} wins!` : "It's a draw!",
           dotClass: outcome.winner ? "turn-dot dot-win" : "turn-dot",
+          scores: outcome.winner
+            ? { ...prev.scores, [outcome.winner]: prev.scores[outcome.winner] + 1 }
+            : { ...prev.scores, D: prev.scores.D + 1 },
         };
       }
 

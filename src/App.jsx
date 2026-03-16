@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useGame } from "./hooks/useGame";
 import { useTheme } from "./hooks/useTheme";
 import { usePeer } from "./hooks/usePeer";
@@ -25,6 +25,7 @@ export default function App() {
   const [isHost, setIsHost] = useState(false);
   const [myMark, setMyMark] = useState(null); // "X" | "O"
   const [playerNames, setPlayerNames] = useState({ X: "", O: "" });
+  const sentSettingsRef = useRef(false);
 
   const {
     boards,
@@ -35,12 +36,11 @@ export default function App() {
     scores: localScores,
     handleClick: localHandleClick,
     resetGame: localResetGame,
-    resetAll,
     applyOpponentMove,
     applyReset,
     applyScores,
     gameOver,
-  } = useGame(mode === "online" ? "online" : mode, mode === "online" ? 1 : gridCount);
+  } = useGame(mode === "online" ? "online" : mode, gridCount);
 
   const handleOpponentMove = useCallback((index) => {
     applyOpponentMove?.(index);
@@ -54,6 +54,13 @@ export default function App() {
     applyScores?.(incoming);
   }, [applyScores]);
 
+  const handleOpponentSettings = useCallback((incoming) => {
+    const next = Number(incoming?.grids);
+    if (!Number.isFinite(next)) return;
+    if (next < 1 || next > 3) return;
+    setGridCount(next);
+  }, []);
+
   const handleOpponentJoined = useCallback(() => {
     setOnlineState("playing");
   }, []);
@@ -62,23 +69,37 @@ export default function App() {
     setOnlineState("disconnected");
   }, []);
 
-  const { peerId, connected, error, ready, peerDead, reconnect, connectToPeer, sendMove, sendReset, sendScores } = usePeer({
+  const { peerId, connected, error, ready, peerDead, reconnect, connectToPeer, sendMove, sendReset, sendScores, sendSettings } = usePeer({
     onMove: handleOpponentMove,
     onReset: handleOpponentReset,
     onScores: handleOpponentScores,
+    onSettings: handleOpponentSettings,
     onOpponentJoined: handleOpponentJoined,
     onOpponentLeft: handleOpponentLeft,
   });
+
+  useEffect(() => {
+    if (mode !== "online" || !connected) {
+      sentSettingsRef.current = false;
+      return;
+    }
+    if (!isHost) return;
+    if (sentSettingsRef.current) return;
+    sendSettings?.({ grids: gridCount });
+    sentSettingsRef.current = true;
+  }, [connected, gridCount, isHost, mode, sendSettings]);
 
   // Auto-join if URL has ?room=
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get("room");
+    const gridsParam = Number(params.get("grids"));
+    if (Number.isFinite(gridsParam) && gridsParam >= 1 && gridsParam <= 3) {
+      setGridCount(gridsParam);
+    }
     if (room && ready) {
       setMode("online");
-      setGridCount(1);
       setOnlineState("modal_join");
-      resetAll();
       // store room id for auto-fill
       window._autoRoomId = room;
     }
@@ -87,19 +108,15 @@ export default function App() {
   function handleModeChange(newMode) {
     if (newMode === "online") {
       setMode("online");
-      setGridCount(1);
       setOnlineState("modal");
-      resetAll();
     } else {
       setMode(newMode);
       setOnlineState("idle");
-      resetAll();
     }
   }
 
   function handleGridChange(nextCount) {
     setGridCount(nextCount);
-    resetAll();
   }
 
   function handleHost(name) {
@@ -132,9 +149,12 @@ export default function App() {
     }
     // Only allow click if it's your turn
     if (current !== myMark) return;
-    const resolvedCell = typeof cellIndex === "number" ? cellIndex : boardIndex;
-    localHandleClick(resolvedCell);
-    sendMove(resolvedCell);
+    localHandleClick(boardIndex, cellIndex);
+    if (boards.length === 1) {
+      sendMove(cellIndex);
+      return;
+    }
+    sendMove({ boardIndex, cellIndex, boardCount: boards.length });
   }
 
   // After a score changes in online mode, send it to opponent
@@ -154,7 +174,6 @@ export default function App() {
     setOnlineState("idle");
     setMyMark(null);
     setPlayerNames({ X: "", O: "" });
-    resetAll();
     // Remove ?room= from URL
     window.history.replaceState({}, "", window.location.pathname);
   }
@@ -166,7 +185,7 @@ export default function App() {
     if (mode === "1v1") return `${gridLabel} · two players · same screen`;
     if (mode === "bot") return `${gridLabel} · you are X · bot plays O`;
     if (mode === "online" && onlineState === "playing") {
-      return `you are ${myMark} · ${connected ? "friend connected" : "waiting…"}`;
+      return `${gridLabel} · you are ${myMark} · ${connected ? "friend connected" : "waiting…"}`;
     }
     return "play with a friend online";
   }
@@ -181,8 +200,12 @@ export default function App() {
 
       <ModeToggle mode={mode} onChange={handleModeChange} />
 
-      {mode !== "online" && (
-        <GridToggle grids={gridCount} onChange={handleGridChange} />
+      {(mode !== "online" || onlineState === "modal" || onlineState === "modal_join") && (
+        <GridToggle
+          grids={gridCount}
+          onChange={handleGridChange}
+          disabled={mode === "online" && onlineState !== "modal" && onlineState !== "modal_join"}
+        />
       )}
 
       <p className="game-subtitle">{getSubtitle()}</p>
@@ -231,6 +254,7 @@ export default function App() {
       {mode === "online" && onlineState === "waiting" && (
         <WaitingRoom
           peerId={peerId}
+          gridCount={gridCount}
           playerName={playerNames.X}
           peerDead={peerDead}
           onRefresh={() => { reconnect(); }}
