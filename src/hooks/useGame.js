@@ -5,16 +5,15 @@ import { getBotMove } from "../logic/minimax";
 const CELL_SIZE = 96;
 const BOT_THINK_DELAY_MS = 220;
 
-const INITIAL_STATE = {
-  board: Array(9).fill(""),
-  current: "X",
-  gameOver: false,
-  winCombo: null,
-  winStyle: {},
-  status: "Player X's turn",
-  dotClass: "turn-dot dot-x",
-  botThinking: false,
-};
+function createBoards(boardCount) {
+  return Array.from({ length: boardCount }, () => ({
+    cells: Array(9).fill(""),
+    gameOver: false,
+    winCombo: null,
+    winStyle: {},
+    result: null, // "X" | "O" | "D" | null
+  }));
+}
 
 function getWinLineStyle(combo) {
   const pos = (i) => ({
@@ -40,196 +39,279 @@ function getWinLineStyle(combo) {
   };
 }
 
-export function useGame(mode) {
-  const [state, setState] = useState(INITIAL_STATE);
-  const [scores, setScores] = useState({ X: 0, O: 0, D: 0 });
-  const [nextStarter, setNextStarter] = useState("O"); // after game 1 (X starts), O goes next
+function getMatchOutcome(boards) {
+  const winsX = boards.filter((b) => b.result === "X").length;
+  const winsO = boards.filter((b) => b.result === "O").length;
+  const finished = boards.filter((b) => b.result !== null).length;
+  const boardCount = boards.length;
 
-  const { board, current, gameOver, winCombo, winStyle, status, dotClass, botThinking } = state;
+  if (boardCount === 1) {
+    const only = boards[0].result;
+    if (only === "X" || only === "O") return { done: true, winner: only, draw: false };
+    if (only === "D") return { done: true, winner: null, draw: true };
+    return { done: false, winner: null, draw: false };
+  }
+
+  if (boardCount === 2) {
+    if (winsX === 2) return { done: true, winner: "X", draw: false };
+    if (winsO === 2) return { done: true, winner: "O", draw: false };
+    if (finished === 2) return { done: true, winner: null, draw: true };
+    return { done: false, winner: null, draw: false };
+  }
+
+  // 3 boards: win if you win >= 2 boards
+  if (winsX >= 2) return { done: true, winner: "X", draw: false };
+  if (winsO >= 2) return { done: true, winner: "O", draw: false };
+  if (finished === 3) return { done: true, winner: null, draw: true };
+  return { done: false, winner: null, draw: false };
+}
+
+function createInitialState({ boardCount, mode, starter = "X" }) {
+  const status = mode === "online" ? `${starter}'s turn` : `Player ${starter}'s turn`;
+  return {
+    boards: createBoards(boardCount),
+    current: starter,
+    matchOver: false,
+    status,
+    dotClass: `turn-dot dot-${starter.toLowerCase()}`,
+    botThinking: false,
+  };
+}
+
+function resolveIndexes(boardIndex, cellIndex) {
+  if (typeof cellIndex !== "number") return { boardIndex: 0, cellIndex: boardIndex };
+  return { boardIndex, cellIndex };
+}
+
+export function useGame(mode, boardCount = 1) {
+  const safeBoardCount = mode === "online" ? 1 : Math.max(1, Math.min(3, Number(boardCount) || 1));
+
+  const [state, setState] = useState(() =>
+    ({
+      ...createInitialState({ boardCount: safeBoardCount, mode, starter: "X" }),
+      scores: { X: 0, O: 0, D: 0 },
+    }),
+  );
+  const [nextStarter, setNextStarter] = useState("O"); // after match 1 (X starts), O goes next
+
+  const { boards, current, matchOver, status, dotClass, botThinking, scores } = state;
 
   const patch = (updates) => setState((s) => ({ ...s, ...updates }));
 
-  function applyMove(boardSnapshot, mark) {
-    const win = checkWin(boardSnapshot);
-    const draw = !win && isDraw(boardSnapshot);
-
-    if (win) {
-      setScores((s) => ({ ...s, [mark]: s[mark] + 1 }));
-      setState((s) => ({
-        ...s,
-        board: boardSnapshot,
-        winCombo: win,
-        status: mode === "online" ? `${mark} wins!` : `Player ${mark} wins!`,
-        dotClass: "turn-dot dot-win",
-        gameOver: true,
-      }));
-      setTimeout(() => patch({ winStyle: getWinLineStyle(win) }), 10);
-      return true;
-    }
-
-    if (draw) {
-      setScores((s) => ({ ...s, D: s.D + 1 }));
-      setState((s) => ({
-        ...s,
-        board: boardSnapshot,
-        status: "It's a draw!",
-        dotClass: "turn-dot",
-        gameOver: true,
-      }));
-      return true;
-    }
-
-    return false;
-  }
-
-  function handleClick(i) {
-    if (gameOver || board[i] || botThinking) return;
-    if (mode === "bot" && current === "O") return;
-
-    const newBoard = [...board];
-    newBoard[i] = current;
-
-    const ended = applyMove(newBoard, current);
-    if (ended) return;
-
-    const next = current === "X" ? "O" : "X";
-    setState((s) => ({
-      ...s,
-      board: newBoard,
-      current: next,
-      status: mode === "bot" && next === "O"
-        ? "Bot is thinking…"
-        : mode === "online"
-        ? `${next}'s turn`
-        : `Player ${next}'s turn`,
-      dotClass: `turn-dot dot-${next.toLowerCase()}`,
+  useEffect(() => {
+    setNextStarter("O");
+    setState((prev) => ({
+      ...prev,
+      ...createInitialState({ boardCount: safeBoardCount, mode, starter: "X" }),
     }));
+  }, [mode, safeBoardCount]);
+
+  function labelTurn(next) {
+    if (mode === "bot" && next === "O") return "Bot is thinking…";
+    if (mode === "online") return `${next}'s turn`;
+    return `Player ${next}'s turn`;
   }
 
-  // For online mode: apply opponent's move
-  const applyOpponentMove = useCallback((i) => {
+  function applyMove(boardIndex, cellIndex) {
+    const { boardIndex: bIndex, cellIndex: cIndex } = resolveIndexes(boardIndex, cellIndex);
+
     setState((prev) => {
-      if (prev.gameOver || prev.board[i]) return prev;
-      const newBoard = [...prev.board];
+      if (prev.matchOver || prev.botThinking) return prev;
+      if (mode === "bot" && prev.current === "O") return prev;
+
+      const target = prev.boards[bIndex];
+      if (!target || target.gameOver || target.cells[cIndex]) return prev;
+
       const mark = prev.current;
-      newBoard[i] = mark;
+      const nextBoards = prev.boards.map((b, idx) => {
+        if (idx !== bIndex) return b;
 
-      const win = checkWin(newBoard);
-      const draw = !win && isDraw(newBoard);
+        const nextCells = [...b.cells];
+        nextCells[cIndex] = mark;
 
-      if (win) {
-        setTimeout(() => patch({ winStyle: getWinLineStyle(win) }), 10);
+        const win = checkWin(nextCells);
+        const draw = !win && isDraw(nextCells);
+
+        if (win) {
+          return {
+            ...b,
+            cells: nextCells,
+            winCombo: win,
+            winStyle: getWinLineStyle(win),
+            gameOver: true,
+            result: mark,
+          };
+        }
+
+        if (draw) {
+          return {
+            ...b,
+            cells: nextCells,
+            gameOver: true,
+            result: "D",
+          };
+        }
+
+        return { ...b, cells: nextCells };
+      });
+
+      const outcome = getMatchOutcome(nextBoards);
+      if (outcome.done) {
+        if (outcome.winner) {
+          return {
+            ...prev,
+            boards: nextBoards,
+            matchOver: true,
+            status: mode === "online" ? `${outcome.winner} wins!` : `Player ${outcome.winner} wins!`,
+            dotClass: "turn-dot dot-win",
+            scores: { ...prev.scores, [outcome.winner]: prev.scores[outcome.winner] + 1 },
+          };
+        }
+
         return {
           ...prev,
-          board: newBoard,
-          winCombo: win,
-          status: `${mark} wins!`,
-          dotClass: "turn-dot dot-win",
-          gameOver: true,
-        };
-      }
-
-      if (draw) {
-        return {
-          ...prev,
-          board: newBoard,
+          boards: nextBoards,
+          matchOver: true,
           status: "It's a draw!",
           dotClass: "turn-dot",
-          gameOver: true,
+          scores: { ...prev.scores, D: prev.scores.D + 1 },
         };
       }
 
       const next = mark === "X" ? "O" : "X";
       return {
         ...prev,
-        board: newBoard,
+        boards: nextBoards,
         current: next,
-        status: `${next}'s turn`,
+        status: labelTurn(next),
         dotClass: `turn-dot dot-${next.toLowerCase()}`,
       };
     });
-  }, []);
+  }
+
+  // For online mode: apply opponent's move (supports legacy number and {boardIndex, cellIndex})
+  const applyOpponentMove = useCallback((payload) => {
+    setState((prev) => {
+      if (mode !== "online" || prev.matchOver) return prev;
+
+      const bIndex = typeof payload === "number" ? 0 : Number(payload?.boardIndex ?? 0);
+      const cIndex = typeof payload === "number" ? payload : Number(payload?.cellIndex ?? -1);
+
+      const target = prev.boards[bIndex];
+      if (!target || target.gameOver || target.cells[cIndex]) return prev;
+
+      const mark = prev.current;
+      const nextBoards = prev.boards.map((b, idx) => {
+        if (idx !== bIndex) return b;
+
+        const nextCells = [...b.cells];
+        nextCells[cIndex] = mark;
+        const win = checkWin(nextCells);
+        const draw = !win && isDraw(nextCells);
+
+        if (win) return { ...b, cells: nextCells, winCombo: win, winStyle: getWinLineStyle(win), gameOver: true, result: mark };
+        if (draw) return { ...b, cells: nextCells, gameOver: true, result: "D" };
+        return { ...b, cells: nextCells };
+      });
+
+      const outcome = getMatchOutcome(nextBoards);
+      if (outcome.done) {
+        return {
+          ...prev,
+          boards: nextBoards,
+          matchOver: true,
+          status: outcome.winner ? `${outcome.winner} wins!` : "It's a draw!",
+          dotClass: outcome.winner ? "turn-dot dot-win" : "turn-dot",
+        };
+      }
+
+      const next = mark === "X" ? "O" : "X";
+      return { ...prev, boards: nextBoards, current: next, status: `${next}'s turn`, dotClass: `turn-dot dot-${next.toLowerCase()}` };
+    });
+  }, [mode]);
 
   // For online mode: apply scores sent by opponent
   const applyScores = useCallback((incoming) => {
-    setScores(incoming);
+    setState((prev) => ({ ...prev, scores: incoming }));
   }, []);
 
   // For online mode: apply opponent's reset
   const applyReset = useCallback(() => {
-    setNextStarter((prev) => {
-      const starter = prev;
-      setState({
-        ...INITIAL_STATE,
-        board: Array(9).fill(""),
-        current: starter,
-        status: `${starter}'s turn`,
-        dotClass: `turn-dot dot-${starter.toLowerCase()}`,
-      });
+    setNextStarter((prevStarter) => {
+      const starter = prevStarter;
+      setState((prev) => ({
+        ...prev,
+        ...createInitialState({ boardCount: safeBoardCount, mode, starter }),
+      }));
       return starter === "X" ? "O" : "X";
     });
-  }, []);
+  }, [mode, safeBoardCount]);
 
   useEffect(() => {
-    if (mode !== "bot" || current !== "O" || gameOver) return;
+    if (mode !== "bot" || current !== "O" || matchOver) return;
 
     patch({ botThinking: true });
 
     const timer = setTimeout(() => {
       setState((prev) => {
-        if (prev.gameOver || prev.current !== "O") return { ...prev, botThinking: false };
+        if (prev.matchOver || prev.current !== "O") return { ...prev, botThinking: false };
 
-        const newBoard = [...prev.board];
-        const move = getBotMove([...newBoard]);
+        const candidates = prev.boards
+          .map((b, idx) => {
+            if (b.gameOver) return null;
+            const move = getBotMove([...b.cells]);
+            if (move === -1) return null;
+            const nextCells = [...b.cells];
+            nextCells[move] = "O";
+            return { boardIndex: idx, cellIndex: move, immediateWin: Boolean(checkWin(nextCells)) };
+          })
+          .filter(Boolean);
 
-        if (move === -1) {
-          if (isDraw(newBoard)) {
-            setScores((s) => ({ ...s, D: s.D + 1 }));
-            return {
-              ...prev,
-              status: "It's a draw!",
-              dotClass: "turn-dot",
-              gameOver: true,
-              botThinking: false,
-            };
-          }
-          return { ...prev, botThinking: false };
-        }
+        if (candidates.length === 0) return { ...prev, botThinking: false };
 
-        newBoard[move] = "O";
+        const alreadyWon = prev.boards.filter((b) => b.result === "O").length;
+        const needsForMatch = prev.boards.length === 2 ? 2 : prev.boards.length === 3 ? 2 : 1;
 
-        const win = checkWin(newBoard);
-        const draw = !win && isDraw(newBoard);
+        const winningMatchNow = candidates.find((c) => c.immediateWin && alreadyWon + 1 >= needsForMatch);
+        const best = winningMatchNow ?? candidates.find((c) => c.immediateWin) ?? candidates[0];
 
-        if (win) {
-          setScores((s) => ({ ...s, O: s.O + 1 }));
-          setTimeout(() => patch({ winStyle: getWinLineStyle(win) }), 10);
+        const nextBoards = prev.boards.map((b, idx) => {
+          if (idx !== best.boardIndex) return b;
+          const nextCells = [...b.cells];
+          nextCells[best.cellIndex] = "O";
+
+          const win = checkWin(nextCells);
+          const draw = !win && isDraw(nextCells);
+
+          if (win) return { ...b, cells: nextCells, winCombo: win, winStyle: getWinLineStyle(win), gameOver: true, result: "O" };
+          if (draw) return { ...b, cells: nextCells, gameOver: true, result: "D" };
+          return { ...b, cells: nextCells };
+        });
+
+        const outcome = getMatchOutcome(nextBoards);
+        if (outcome.done) {
+          const statusText = outcome.winner
+            ? outcome.winner === "O"
+              ? "Bot wins!"
+              : `Player ${outcome.winner} wins!`
+            : "It's a draw!";
+
           return {
             ...prev,
-            board: newBoard,
-            winCombo: win,
-            status: "Bot wins!",
-            dotClass: "turn-dot dot-win",
-            gameOver: true,
-            botThinking: false,
-          };
-        }
-
-        if (draw) {
-          setScores((s) => ({ ...s, D: s.D + 1 }));
-          return {
-            ...prev,
-            board: newBoard,
-            status: "It's a draw!",
-            dotClass: "turn-dot",
-            gameOver: true,
+            boards: nextBoards,
+            matchOver: true,
+            status: statusText,
+            dotClass: outcome.winner ? "turn-dot dot-win" : "turn-dot",
+            scores: outcome.winner
+              ? { ...prev.scores, [outcome.winner]: prev.scores[outcome.winner] + 1 }
+              : { ...prev.scores, D: prev.scores.D + 1 },
             botThinking: false,
           };
         }
 
         return {
           ...prev,
-          board: newBoard,
+          boards: nextBoards,
           current: "X",
           status: "Player X's turn",
           dotClass: "turn-dot dot-x",
@@ -239,37 +321,35 @@ export function useGame(mode) {
     }, BOT_THINK_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [current, gameOver, mode]);
+  }, [current, matchOver, mode]);
 
   function resetGame() {
     const starter = nextStarter;
     setNextStarter(starter === "X" ? "O" : "X");
-    setState({
-      ...INITIAL_STATE,
-      board: Array(9).fill(""),
-      current: starter,
-      status: mode === "online" ? `${starter}'s turn` : `Player ${starter}'s turn`,
-      dotClass: `turn-dot dot-${starter.toLowerCase()}`,
-    });
+    setState((prev) => ({
+      ...prev,
+      ...createInitialState({ boardCount: safeBoardCount, mode, starter }),
+    }));
   }
 
   function resetAll() {
     setNextStarter("O");
-    setState({ ...INITIAL_STATE, board: Array(9).fill("") });
-    setScores({ X: 0, O: 0, D: 0 });
+    setState({
+      ...createInitialState({ boardCount: safeBoardCount, mode, starter: "X" }),
+      scores: { X: 0, O: 0, D: 0 },
+    });
   }
 
   return {
-    board,
+    boards,
     current,
-    gameOver,
-    winCombo,
-    winStyle,
+    matchOver,
+    gameOver: matchOver,
     status,
     dotClass,
     botThinking,
     scores,
-    handleClick,
+    handleClick: applyMove,
     resetGame,
     resetAll,
     applyOpponentMove,

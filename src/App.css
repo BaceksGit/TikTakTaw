@@ -54,6 +54,15 @@
   position: relative;
 }
 .board.bot-thinking { pointer-events: none; }
+.board.disabled { pointer-events: none; opacity: 0.75; }
+
+.boards-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+}
 .line { position: absolute; background: var(--border); border-radius: 2px; }
 .vline1 { width: 1px; height: 288px; top: 0; left: 96px; }
 .vline2 { width: 1px; height: 288px; top: 0; left: 192px; }

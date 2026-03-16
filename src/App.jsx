@@ -3,6 +3,7 @@ import { useGame } from "./hooks/useGame";
 import { useTheme } from "./hooks/useTheme";
 import { usePeer } from "./hooks/usePeer";
 import Board from "./components/Board";
+import GridToggle from "./components/GridToggle";
 import ModeToggle from "./components/ModeToggle";
 import ScoreRow from "./components/ScoreRow";
 import StatusBar from "./components/StatusBar";
@@ -16,6 +17,7 @@ import "./App.css";
 
 export default function App() {
   const [mode, setMode] = useState("1v1");
+  const [gridCount, setGridCount] = useState(1);
   const { theme, cycleTheme } = useTheme();
 
   // online state
@@ -25,10 +27,8 @@ export default function App() {
   const [playerNames, setPlayerNames] = useState({ X: "", O: "" });
 
   const {
-    board,
+    boards,
     current,
-    winCombo,
-    winStyle,
     status,
     dotClass,
     botThinking,
@@ -40,7 +40,7 @@ export default function App() {
     applyReset,
     applyScores,
     gameOver,
-  } = useGame(mode === "online" ? "online" : mode);
+  } = useGame(mode === "online" ? "online" : mode, mode === "online" ? 1 : gridCount);
 
   const handleOpponentMove = useCallback((index) => {
     applyOpponentMove?.(index);
@@ -76,7 +76,9 @@ export default function App() {
     const room = params.get("room");
     if (room && ready) {
       setMode("online");
+      setGridCount(1);
       setOnlineState("modal_join");
+      resetAll();
       // store room id for auto-fill
       window._autoRoomId = room;
     }
@@ -85,6 +87,7 @@ export default function App() {
   function handleModeChange(newMode) {
     if (newMode === "online") {
       setMode("online");
+      setGridCount(1);
       setOnlineState("modal");
       resetAll();
     } else {
@@ -92,6 +95,11 @@ export default function App() {
       setOnlineState("idle");
       resetAll();
     }
+  }
+
+  function handleGridChange(nextCount) {
+    setGridCount(nextCount);
+    resetAll();
   }
 
   function handleHost(name) {
@@ -117,15 +125,16 @@ export default function App() {
   }, [connected, onlineState]);
 
   // Wrap handleClick for online mode
-  function handleClick(i) {
+  function handleClick(boardIndex, cellIndex) {
     if (mode !== "online") {
-      localHandleClick(i);
+      localHandleClick(boardIndex, cellIndex);
       return;
     }
     // Only allow click if it's your turn
     if (current !== myMark) return;
-    localHandleClick(i);
-    sendMove(i);
+    const resolvedCell = typeof cellIndex === "number" ? cellIndex : boardIndex;
+    localHandleClick(resolvedCell);
+    sendMove(resolvedCell);
   }
 
   // After a score changes in online mode, send it to opponent
@@ -153,8 +162,9 @@ export default function App() {
   const activeScores = localScores;
 
   function getSubtitle() {
-    if (mode === "1v1") return "two players · same screen";
-    if (mode === "bot") return "you are X · bot plays O";
+    const gridLabel = gridCount === 1 ? "1 grid" : `${gridCount} grids`;
+    if (mode === "1v1") return `${gridLabel} · two players · same screen`;
+    if (mode === "bot") return `${gridLabel} · you are X · bot plays O`;
     if (mode === "online" && onlineState === "playing") {
       return `you are ${myMark} · ${connected ? "friend connected" : "waiting…"}`;
     }
@@ -171,18 +181,27 @@ export default function App() {
 
       <ModeToggle mode={mode} onChange={handleModeChange} />
 
+      {mode !== "online" && (
+        <GridToggle grids={gridCount} onChange={handleGridChange} />
+      )}
+
       <p className="game-subtitle">{getSubtitle()}</p>
 
       <StatusBar dotClass={dotClass} status={status} />
 
-      <Board
-        board={board}
-        winCombo={winCombo}
-        winStyle={winStyle}
-        onCellClick={handleClick}
-        botThinking={botThinking}
-        disabled={mode === "online" && current !== myMark}
-      />
+      <div className="boards-row">
+        {boards.map((b, boardIndex) => (
+          <Board
+            key={boardIndex}
+            board={b.cells}
+            winCombo={b.winCombo}
+            winStyle={b.winStyle}
+            onCellClick={(cellIndex) => handleClick(boardIndex, cellIndex)}
+            botThinking={botThinking}
+            disabled={gameOver || b.gameOver || (mode === "online" && current !== myMark)}
+          />
+        ))}
+      </div>
 
       <div className="controls">
         <ScoreRow scores={activeScores} mode={mode} playerNames={playerNames} />

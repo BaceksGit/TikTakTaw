@@ -1,4 +1,4 @@
-export default function Cell({ value, index, isWin, onClick, disabled }) {
+export default function Cell({ value, isWin, onClick, disabled }) {
     const markClass = [
         "cell-mark",
         value ? "show" : "",
@@ -8,7 +8,7 @@ export default function Cell({ value, index, isWin, onClick, disabled }) {
         return (
         <div
             className={`cell${value ? " taken" : ""}${disabled ? " no-hover" : ""}`}
-            onClick={onClick}
+            onClick={disabled ? undefined : onClick}
         >
             <span className={markClass}>{value}</span>
         </div>
